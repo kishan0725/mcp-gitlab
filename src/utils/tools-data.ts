@@ -196,6 +196,98 @@ export const toolDefinitions = [
     }
   },
   {
+    name: 'gitlab_create_merge_request_discussion',
+    description: 'Create an inline comment/discussion on a specific line in a merge request. This is the full-featured version that requires commit SHAs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: {
+          type: 'string',
+          description: 'The ID or URL-encoded path of the project'
+        },
+        merge_request_iid: {
+          type: 'number',
+          description: 'The internal ID of the merge request'
+        },
+        body: {
+          type: 'string',
+          description: 'The content of the comment'
+        },
+        position: {
+          type: 'object',
+          description: 'Position information for the inline comment',
+          properties: {
+            base_sha: {
+              type: 'string',
+              description: 'SHA of the base commit (parent of the MR)'
+            },
+            start_sha: {
+              type: 'string',
+              description: 'SHA of the start commit (where the MR starts)'
+            },
+            head_sha: {
+              type: 'string',
+              description: 'SHA of the head commit (latest commit in the MR)'
+            },
+            new_path: {
+              type: 'string',
+              description: 'Path to the file in the new version'
+            },
+            old_path: {
+              type: 'string',
+              description: 'Path to the file in the old version (same as new_path if not renamed)'
+            },
+            new_line: {
+              type: ['number', 'null'],
+              description: 'Line number in the new version (null if line was removed)'
+            },
+            old_line: {
+              type: ['number', 'null'],
+              description: 'Line number in the old version (null if line was added)'
+            }
+          },
+          required: ['base_sha', 'start_sha', 'head_sha', 'new_path', 'old_path']
+        }
+      },
+      required: ['project_id', 'merge_request_iid', 'body', 'position']
+    }
+  },
+  {
+    name: 'gitlab_create_merge_request_discussion_simple',
+    description: 'Create an inline comment on a specific line in a merge request (simplified version). Automatically fetches commit SHAs from the merge request.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: {
+          type: 'string',
+          description: 'The ID or URL-encoded path of the project'
+        },
+        merge_request_iid: {
+          type: 'number',
+          description: 'The internal ID of the merge request'
+        },
+        body: {
+          type: 'string',
+          description: 'The content of the comment'
+        },
+        file_path: {
+          type: 'string',
+          description: 'Path to the file to comment on'
+        },
+        line_number: {
+          type: 'number',
+          description: 'Line number to comment on'
+        },
+        line_type: {
+          type: 'string',
+          description: 'Type of line: "new" for added/modified lines, "old" for removed lines',
+          enum: ['new', 'old']
+        }
+      },
+      required: ['project_id', 'merge_request_iid', 'body', 'file_path', 'line_number', 'line_type']
+    }
+  },
+  {
     name: 'gitlab_list_issues',
     description: 'List issues in a GitLab project',
     inputSchema: {
@@ -857,4 +949,4 @@ export const toolDefinitions = [
 export const repositoryTools = toolDefinitions.slice(0, 12);
 export const integrationTools = toolDefinitions.slice(10, 20);
 export const cicdTools = toolDefinitions.slice(20, 31);
-export const usersGroupsTools = toolDefinitions.slice(31); 
+export const usersGroupsTools = toolDefinitions.slice(31);

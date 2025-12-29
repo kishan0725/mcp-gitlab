@@ -112,6 +112,38 @@ Update a merge request title and description
 | `title` | `string` | No | The title of the merge request |
 | `description` | `string` | No | The description of the merge request |
 
+### gitlab_create_merge_request_discussion
+
+Create an inline comment/discussion on a specific line in a merge request. This is the full-featured version that requires commit SHAs.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+| ---- | ---- | -------- | ----------- |
+| `project_id` | `string` | No | The ID or URL-encoded path of the project |
+| `merge_request_iid` | `number` | No | The internal ID of the merge request |
+| `body` | `string` | No | The content of the comment |
+| `position` | `object` | No | Position information for the inline comment |
+| `start_sha` | `string` | Yes | SHA of the start commit (where the MR starts) |
+| `head_sha` | `string` | Yes | SHA of the head commit (latest commit in the MR) |
+| `new_path` | `string` | Yes | Path to the file in the new version |
+| `old_path` | `string` | Yes | Path to the file in the old version (same as new_path if not renamed) |
+
+### gitlab_create_merge_request_discussion_simple
+
+Create an inline comment on a specific line in a merge request (simplified version). Automatically fetches commit SHAs from the merge request.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+| ---- | ---- | -------- | ----------- |
+| `project_id` | `string` | Yes | The ID or URL-encoded path of the project |
+| `merge_request_iid` | `number` | Yes | The internal ID of the merge request |
+| `body` | `string` | Yes | The content of the comment |
+| `file_path` | `string` | Yes | Path to the file to comment on |
+| `line_number` | `number` | Yes | Line number to comment on |
+| `line_type` | `string` | Yes | Type of line:  |
+
 ### gitlab_list_issues
 
 List issues in a GitLab project

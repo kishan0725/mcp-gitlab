@@ -288,6 +288,32 @@ export const toolDefinitions = [
     }
   },
   {
+    name: 'gitlab_reply_to_discussion',
+    description: 'Add a reply to an existing discussion thread in a merge request. Use this to continue conversations on inline comments or general discussions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: {
+          type: 'string',
+          description: 'The ID or URL-encoded path of the project'
+        },
+        merge_request_iid: {
+          type: 'number',
+          description: 'The internal ID of the merge request'
+        },
+        discussion_id: {
+          type: 'string',
+          description: 'The ID of the discussion thread to reply to'
+        },
+        body: {
+          type: 'string',
+          description: 'The content of the reply'
+        }
+      },
+      required: ['project_id', 'merge_request_iid', 'discussion_id', 'body']
+    }
+  },
+  {
     name: 'gitlab_list_issues',
     description: 'List issues in a GitLab project',
     inputSchema: {

@@ -286,3 +286,24 @@ export const createMergeRequestDiscussionSimple: ToolHandler = async (params, co
   
   return formatResponse(response.data);
 };
+
+/**
+ * Reply to an existing discussion thread handler
+ */
+export const replyToDiscussion: ToolHandler = async (params, context) => {
+  const { project_id, merge_request_iid, discussion_id, body } = params.arguments || {};
+  
+  if (!project_id || !merge_request_iid || !discussion_id || !body) {
+    throw new McpError(
+      ErrorCode.InvalidParams, 
+      'project_id, merge_request_iid, discussion_id, and body are required'
+    );
+  }
+  
+  const response = await context.axiosInstance.post(
+    `/projects/${encodeURIComponent(String(project_id))}/merge_requests/${merge_request_iid}/discussions/${encodeURIComponent(String(discussion_id))}/notes`,
+    { body }
+  );
+  
+  return formatResponse(response.data);
+};

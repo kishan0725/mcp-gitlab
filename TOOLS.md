@@ -144,6 +144,19 @@ Create an inline comment on a specific line in a merge request (simplified versi
 | `line_number` | `number` | Yes | Line number to comment on |
 | `line_type` | `string` | Yes | Type of line:  |
 
+### gitlab_reply_to_discussion
+
+Add a reply to an existing discussion thread in a merge request. Use this to continue conversations on inline comments or general discussions.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+| ---- | ---- | -------- | ----------- |
+| `project_id` | `string` | Yes | The ID or URL-encoded path of the project |
+| `merge_request_iid` | `number` | Yes | The internal ID of the merge request |
+| `discussion_id` | `string` | Yes | The ID of the discussion thread to reply to |
+| `body` | `string` | Yes | The content of the reply |
+
 ### gitlab_list_issues
 
 List issues in a GitLab project

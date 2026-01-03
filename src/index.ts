@@ -52,6 +52,54 @@ if (!GITLAB_API_TOKEN) {
 }
 
 /**
+ * Helper function to extract GitLab credentials from request headers
+ */
+function extractGitLabHeaders(req: express.Request): { token: string; url: string } {
+  const token = req.headers['x-gitlab-token'] as string | undefined;
+  const url = req.headers['x-gitlab-url'] as string | undefined;
+  
+  if (!token) {
+    throw new McpError(
+      ErrorCode.InvalidRequest,
+      'X-GitLab-Token header is required for HTTP transport'
+    );
+  }
+  
+  return {
+    token,
+    url: url || 'https://gitlab.com/api/v4'
+  };
+}
+
+/**
+ * Helper function to create an axios instance with GitLab credentials
+ */
+function createGitLabAxiosInstance(token: string, url: string): AxiosInstance {
+  return axios.create({
+    baseURL: url,
+    headers: {
+      'PRIVATE-TOKEN': token
+    }
+  });
+}
+
+/**
+ * Helper function to create handler context from axios instance
+ */
+function createHandlerContext(axiosInstance: AxiosInstance): HandlerContext {
+  const integrationsManager = new IntegrationsManager(axiosInstance);
+  const ciCdManager = new CiCdManager(axiosInstance);
+  const usersGroupsManager = new UsersGroupsManager(axiosInstance);
+
+  return {
+    axiosInstance,
+    integrationsManager,
+    ciCdManager,
+    usersGroupsManager
+  };
+}
+
+/**
  * GitLab MCP Server class
  */
 class GitLabServer {
@@ -161,48 +209,104 @@ class GitLabServer {
     app.use(cors({
       origin: '*',
       methods: ['GET', 'POST', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'mcp-session-id'],
+      allowedHeaders: ['Content-Type', 'mcp-session-id', 'X-GitLab-Token', 'X-GitLab-URL'],
     }));
 
     // Parse JSON bodies
     app.use(express.json());
 
-    // Store active transports by session ID
-    const transports: Record<string, StreamableHTTPServerTransport> = {};
+    // Store active transports and their handler contexts by session ID
+    const sessions: Record<string, { 
+      transport: StreamableHTTPServerTransport;
+      server: Server;
+    }> = {};
 
     // POST endpoint for client requests
     app.post('/mcp', async (req, res) => {
       try {
+        // Extract GitLab credentials from headers for HTTP mode
+        const { token, url } = extractGitLabHeaders(req);
+        
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
-        let transport: StreamableHTTPServerTransport;
+        let session: { transport: StreamableHTTPServerTransport; server: Server };
 
-        if (sessionId && transports[sessionId]) {
+        if (sessionId && sessions[sessionId]) {
           // Reuse existing session
-          transport = transports[sessionId];
+          session = sessions[sessionId];
         } else if (!sessionId) {
-          // New session initialization
-          transport = new StreamableHTTPServerTransport({
+          // Create axios instance with credentials from headers
+          const axiosInstance = createGitLabAxiosInstance(token, url);
+          const handlerContext = createHandlerContext(axiosInstance);
+
+          // Create a new Server instance for this session
+          const server = new Server(
+            {
+              name: "mcp-gitlab",
+              version: "0.1.0",
+            },
+            {
+              capabilities: {
+                tools: {},
+                resources: {}
+              }
+            }
+          );
+
+          // Set up request handlers for this server with the session's context
+          server.setRequestHandler(ListToolsRequestSchema, async () => {
+            return { tools: toolDefinitions };
+          });
+
+          server.setRequestHandler(ListResourcesRequestSchema, async () => {
+            return handleListResources(handlerContext.axiosInstance);
+          });
+
+          server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+            return handleReadResource(request.params.uri, handlerContext.axiosInstance);
+          });
+
+          server.setRequestHandler(CallToolRequestSchema, async (request) => {
+            try {
+              const toolName = request.params.name;
+              const handler = toolRegistry[toolName];
+              
+              if (!handler) {
+                throw new McpError(ErrorCode.InvalidRequest, `Unknown tool: ${toolName}`);
+              }
+              
+              return await handler(request.params, handlerContext);
+            } catch (error) {
+              if (error instanceof McpError) {
+                throw error;
+              }
+              throw handleApiError(error, 'Error executing GitLab operation');
+            }
+          });
+
+          // Create transport for new session
+          const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => {
               const id = Math.random().toString(36).substring(7);
               return id;
             },
             onsessioninitialized: (id) => {
-              transports[id] = transport;
+              sessions[id] = { transport, server };
               console.log(`Session initialized: ${id}`);
             },
             onsessionclosed: (id) => {
-              delete transports[id];
+              delete sessions[id];
               console.log(`Session closed: ${id}`);
             }
           });
 
           transport.onclose = () => {
             if (transport.sessionId) {
-              delete transports[transport.sessionId];
+              delete sessions[transport.sessionId];
             }
           };
 
-          await this.server.connect(transport);
+          await server.connect(transport);
+          session = { transport, server };
         } else {
           res.status(400).json({
             jsonrpc: '2.0',
@@ -212,14 +316,23 @@ class GitLabServer {
           return;
         }
 
-        await transport.handleRequest(req, res, req.body);
+        await session.transport.handleRequest(req, res, req.body);
       } catch (error) {
-        console.error('Error handling POST request:', error);
-        res.status(500).json({ 
-          jsonrpc: '2.0',
-          error: { code: -32603, message: 'Internal server error' },
-          id: null
-        });
+        if (error instanceof McpError) {
+          console.error('GitLab header validation error:', error.message);
+          res.status(401).json({
+            jsonrpc: '2.0',
+            error: { code: -32001, message: error.message },
+            id: null
+          });
+        } else {
+          console.error('Error handling POST request:', error);
+          res.status(500).json({ 
+            jsonrpc: '2.0',
+            error: { code: -32603, message: 'Internal server error' },
+            id: null
+          });
+        }
       }
     });
 
@@ -227,10 +340,10 @@ class GitLabServer {
     app.get('/mcp', async (req, res) => {
       try {
         const sessionId = req.headers['mcp-session-id'] as string;
-        const transport = transports[sessionId];
+        const session = sessions[sessionId];
         
-        if (transport) {
-          await transport.handleRequest(req, res);
+        if (session) {
+          await session.transport.handleRequest(req, res);
         } else {
           res.status(400).json({
             jsonrpc: '2.0',
@@ -248,10 +361,10 @@ class GitLabServer {
     app.delete('/mcp', async (req, res) => {
       try {
         const sessionId = req.headers['mcp-session-id'] as string;
-        const transport = transports[sessionId];
+        const session = sessions[sessionId];
         
-        if (transport) {
-          await transport.handleRequest(req, res);
+        if (session) {
+          await session.transport.handleRequest(req, res);
         } else {
           res.status(400).json({
             jsonrpc: '2.0',
@@ -270,7 +383,7 @@ class GitLabServer {
       res.json({ 
         status: 'ok', 
         transport: 'streamable-http',
-        activeSessions: Object.keys(transports).length
+        activeSessions: Object.keys(sessions).length
       });
     });
 

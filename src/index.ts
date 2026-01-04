@@ -46,8 +46,9 @@ const GITLAB_API_URL = process.env.GITLAB_API_URL || 'https://gitlab.com/api/v4'
 const TRANSPORT_TYPE = process.env.MCP_TRANSPORT || 'stdio';
 const HTTP_PORT = parseInt(process.env.MCP_HTTP_PORT || '3000');
 
-if (!GITLAB_API_TOKEN) {
-  console.error("GITLAB_API_TOKEN environment variable is required");
+// Only require GITLAB_API_TOKEN for stdio mode (HTTP mode uses headers)
+if (TRANSPORT_TYPE === 'stdio' && !GITLAB_API_TOKEN) {
+  console.error("GITLAB_API_TOKEN environment variable is required for stdio transport");
   process.exit(1);
 }
 
